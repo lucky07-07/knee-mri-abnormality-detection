@@ -1,0 +1,20 @@
+model,family,macro_auc
+cnxt_fov140_f0,ConvNeXt-T · 140 mm,0.8967
+cnxt_fov140_f1,ConvNeXt-T · 140 mm,0.9032
+cnxt_fov140_f2,ConvNeXt-T · 140 mm,0.8936
+cnxt_fov140_f3,ConvNeXt-T · 140 mm,0.8908
+cnxt_fov140_f4,ConvNeXt-T · 140 mm,0.8958
+cnxt_native_mirror_f0,ConvNeXt-T · native FOV + mirror,0.9076
+cnxt_native_mirror_f1,ConvNeXt-T · native FOV + mirror,0.904
+cnxt_native_mirror_f2,ConvNeXt-T · native FOV + mirror,0.9024
+cnxt_native_mirror_f3,ConvNeXt-T · native FOV + mirror,0.901
+cnxt_native_mirror_f4,ConvNeXt-T · native FOV + mirror,0.8969
+cnxt_zoom110_f0,ConvNeXt-T · 110 mm zoom,0.8933
+cnxt_zoom110_f1,ConvNeXt-T · 110 mm zoom,0.8989
+cnxt_zoom110_f2,ConvNeXt-T · 110 mm zoom,0.8944
+cnxt_zoom110_f3,ConvNeXt-T · 110 mm zoom,0.9011
+cnxt_zoom110_f4,ConvNeXt-T · 110 mm zoom,0.8994
+cnxt_fov140 (5-fold ensemble),ConvNeXt-T · 140 mm,0.899
+cnxt_zoom110 (5-fold ensemble),ConvNeXt-T · 110 mm zoom,0.9014
+cnxt_native_mirror (5-fold ensemble),ConvNeXt-T · native FOV + mirror,0.9079
+"FINAL: 15 models, family-equal rank average",ensemble,0.9071

@@ -1,0 +1,2 @@
+submission,public_auc,private_auc,gold_auc
+"15 ConvNeXt-T models (3 families × 5 folds), family-equal rank average, TTA",0.92,0.906,0.907
