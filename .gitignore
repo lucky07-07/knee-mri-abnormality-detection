@@ -1,0 +1,24 @@
+# data and large artifacts (competition data cannot be redistributed)
+data/*
+!data/README.md
+outputs/
+models/
+*.pth
+*.npz
+*.zip
+
+# working history (experiments, ablations, scratch)
+_archive/
+
+# python / jupyter
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# editors / tools
+.vscode/
+.idea/
