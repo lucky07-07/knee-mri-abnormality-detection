@@ -1,0 +1,11 @@
+# Report-derived training labels (see notebooks/02_report_labelling.ipynb).
+llm:
+  model_id: Qwen/Qwen2.5-14B-Instruct
+  quant_4bit: true
+  max_chars: 3000
+  max_new_tokens: 120
+keyword_soft_targets:
+  asserted: 0.95
+  negated: 0.02
+  unmentioned: 0.05
+# blend weight per finding and source = (gold AUC - 0.5)^2, normalised over sources
