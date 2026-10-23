@@ -1,0 +1,13 @@
+# Family 3 of 3: ConvNeXt-T on the whole native field of view, with anatomical left/right mirroring
+# (train-time augmentation with p = 0.5, and identity + mirror test-time augmentation).
+name: cnxt_native_mirror
+preprocess:
+  size: 256
+  n_slices: 32
+  sampling: uniform
+  crop: full
+model:
+  backbone: convnext_tiny.fb_in22k_ft_in1k
+  d_model: 384
+  train_windows: 16
+  mirror_p: 0.5

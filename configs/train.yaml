@@ -1,0 +1,11 @@
+# Shared training settings for every model family (one fold per run, 2x T4 on Kaggle: one run per GPU).
+epochs: 10
+batch: 4                  # studies per step
+accum: 2                  # gradient accumulation -> effective batch 8
+lr: 4.0e-4                # attention / head; the pretrained backbone uses lr * backbone_lr_mult
+backbone_lr_mult: 0.25
+weight_decay: 1.0e-2
+ema_decay: 0.998          # evaluation and saved weights use the EMA copy
+n_folds: 5                # folds by md5(StudyInstanceUID); the 58 gold studies validate every fold
+seed: 100                 # run seed = seed + fold
+num_workers: 2

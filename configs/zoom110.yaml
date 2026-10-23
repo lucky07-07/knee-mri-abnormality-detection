@@ -1,0 +1,13 @@
+# Family 2 of 3: ConvNeXt-T on a tighter 110 mm field of view with more slices.
+name: cnxt_zoom110
+preprocess:
+  size: 320
+  fov_mm: 110.0
+  n_slices: 32
+  sampling: interp
+  crop: fov
+model:
+  backbone: convnext_tiny.fb_in22k_ft_in1k
+  d_model: 384
+  train_windows: 16
+  mirror_p: 0.0

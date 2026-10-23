@@ -1,0 +1,13 @@
+# Family 1 of 3: ConvNeXt-T on a 140 mm field of view around the joint.
+name: cnxt_fov140
+preprocess:
+  size: 320
+  fov_mm: 140.0
+  n_slices: 24
+  sampling: interp
+  crop: fov
+model:
+  backbone: convnext_tiny.fb_in22k_ft_in1k
+  d_model: 384
+  train_windows: 16       # random 2.5D windows per study per step (all windows at inference)
+  mirror_p: 0.0
