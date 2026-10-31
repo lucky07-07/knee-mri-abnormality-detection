@@ -5,13 +5,16 @@ probabilities of the tokens "0".."3" are recorded at every generated grade digit
 E = sum(k * p_k) is kept. Reports with the same hard grade then get different scores, which matters for AUC.
 
 Run one worker per GPU (``shard`` / ``n_shards``); on Kaggle 2x T4 a 4-bit 14B model fits once per GPU.
+
+The grader is model-agnostic (used for the LLM benchmark in notebook 06): the prompt and scoring are identical for
+every model. Chat templates without a system role (Gemma) get the system text prepended to the user turn, and a
+grade digit may be spelled by several vocabulary tokens (``"0"``, ``" 0"``, ...), whose probabilities are summed.
 """
 import re
 import time
 
 import numpy as np
 import pandas as pd
-import torch
 
 from kneemri.constants import LABELS, LLM_KEYS
 
@@ -49,40 +52,76 @@ def parse_grades(text):
     return out
 
 
+def grade_digit_ids(tok):
+    """Vocabulary ids spelling each grade digit 0..3, with or without a leading space (``"0"``, ``" 0"``, ``"▁0"``).
+
+    Tokenizers differ: Qwen and Gemma split digits into single tokens, Llama 3 also has space-prefixed digit tokens.
+    The probability of grade k is the summed probability of all its spellings.
+    """
+    ids = {k: set() for k in range(4)}
+    for i in range(len(tok)):
+        s = tok.decode([i], skip_special_tokens=True).replace("▁", " ").strip()
+        if s in ("0", "1", "2", "3"):
+            ids[int(s)].add(i)
+    missing = [k for k, v in ids.items() if not v]
+    if missing:
+        raise ValueError(f"tokenizer has no single-token spelling for grade(s) {missing}")
+    return [sorted(ids[k]) for k in range(4)]
+
+
+def chat_prompt(tok, system, user):
+    """Chat-formatted prompt; templates without a system role (e.g. Gemma) get the system text in the user turn."""
+    try:
+        return tok.apply_chat_template([{"role": "system", "content": system}, {"role": "user", "content": user}],
+                                       tokenize=False, add_generation_prompt=True)
+    except Exception:
+        return tok.apply_chat_template([{"role": "user", "content": f"{system}\n\n{user}"}],
+                                       tokenize=False, add_generation_prompt=True)
+
+
 class ReportGrader:
-    def __init__(self, model_id="Qwen/Qwen2.5-14B-Instruct", quant_4bit=True, max_chars=3000, max_new_tokens=120):
+    def __init__(self, model_id="Qwen/Qwen2.5-14B-Instruct", quant_4bit=True, max_chars=3000, max_new_tokens=120,
+                 compute_dtype="float16", attn_implementation=None, token=None):
+        import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-        self.tok = AutoTokenizer.from_pretrained(model_id)
+        compute_dtype = getattr(torch, compute_dtype) if isinstance(compute_dtype, str) else compute_dtype
+
+        self.tok = AutoTokenizer.from_pretrained(model_id, token=token)
         self.tok.padding_side = "left"
+        if self.tok.pad_token is None:                                       # Llama / Mistral ship without one
+            self.tok.pad_token = self.tok.eos_token
         kw = dict(device_map={"": 0}) if torch.cuda.is_available() else {}
         if quant_4bit:
             kw["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                                                           bnb_4bit_compute_dtype=torch.float16,
+                                                           bnb_4bit_compute_dtype=compute_dtype,
                                                            bnb_4bit_use_double_quant=True)
         else:
-            kw["torch_dtype"] = torch.float16 if torch.cuda.is_available() else torch.float32
-        self.model = AutoModelForCausalLM.from_pretrained(model_id, **kw).eval()
+            kw["torch_dtype"] = compute_dtype if torch.cuda.is_available() else torch.float32
+        if attn_implementation:                                              # Gemma 2 wants "eager"
+            kw["attn_implementation"] = attn_implementation
+        self.model = AutoModelForCausalLM.from_pretrained(model_id, token=token, **kw).eval()
         self.device = next(self.model.parameters()).device
-        self.digits = [self.tok.convert_tokens_to_ids(str(k)) for k in range(4)]
+        self.digit_ids = grade_digit_ids(self.tok)
+        self.digit_set = {i for ids in self.digit_ids for i in ids}
         self.max_chars, self.max_new_tokens = max_chars, max_new_tokens
 
     def prompt(self, report):
-        msgs = [{"role": "system", "content": SYSTEM},
-                {"role": "user", "content": INSTRUCTION.format(report=str(report)[:self.max_chars])}]
-        return self.tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+        return chat_prompt(self.tok, SYSTEM, INSTRUCTION.format(report=str(report)[:self.max_chars]))
 
     def _generate(self, prompts):
+        import torch
         from transformers import LogitsProcessor, LogitsProcessorList
-        digits = self.digits
+        digit_ids = self.digit_ids
 
         class DigitRecorder(LogitsProcessor):
-            # log-probabilities of "0".."3" at every generation step (4 numbers per step)
+            # log-probability of each grade 0..3 at every generation step (summed over its token spellings)
             def __init__(self):
                 self.steps = []
 
             def __call__(self, input_ids, scores):
-                self.steps.append(torch.log_softmax(scores.float(), -1)[:, digits].cpu())
+                lp = torch.log_softmax(scores.float(), -1)
+                self.steps.append(torch.stack([lp[:, ids].logsumexp(-1) for ids in digit_ids], -1).cpu())
                 return scores
 
         try:
@@ -91,7 +130,7 @@ class ReportGrader:
             with torch.no_grad():
                 out = self.model.generate(**enc, max_new_tokens=self.max_new_tokens, do_sample=False,
                                           temperature=None, top_p=None, top_k=None,
-                                          pad_token_id=self.tok.eos_token_id,
+                                          pad_token_id=self.tok.pad_token_id,
                                           logits_processor=LogitsProcessorList([rec]))
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache()
@@ -106,7 +145,7 @@ class ReportGrader:
             hard = parse_grades(text)
             expected = [np.nan if h is None else float(h) for h in hard]     # fallback per key: the hard grade
             for t in range(min(gen_ids.shape[1], len(rec.steps))):
-                if int(gen_ids[b, t]) not in digits:
+                if int(gen_ids[b, t]) not in self.digit_set:
                     continue
                 prefix = self.tok.decode(gen_ids[b, :t], skip_special_tokens=True)
                 last, j = max((prefix.rfind('"%s"' % k), j) for j, k in enumerate(LLM_KEYS))
