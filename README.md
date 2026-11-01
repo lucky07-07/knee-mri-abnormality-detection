@@ -41,6 +41,46 @@ The hard part is the labels, not the images:
 
   Label quality on the test set (macro AUC): rule-based **0.71** → LLM **0.88** → blend **0.93**. See [Experiments](#experiments) for the LLM comparison.
 
+<details>
+<summary><b>The labelling prompt</b> (zero-shot, identical for every LLM; from <a href="src/kneemri/labels/llm.py"><code>labels/llm.py</code></a>)</summary>
+
+**System:**
+
+```text
+You are a musculoskeletal radiologist. You read knee MRI reports written in any language and grade findings. Answer with JSON only.
+```
+
+**User:**
+
+```text
+Grade each finding for THIS knee from the report below (the report may be in any language; read it carefully, including negations).
+Grades: 0 = absent, normal, or not mentioned; 1 = mild, small, equivocal, possible, or low-grade; 2 = definite or moderate; 3 = severe, large, complete, or high-grade.
+
+Findings:
+ACL  = anterior cruciate ligament injury (sprain, partial or complete tear, graft tear). Mucoid degeneration alone = 0.
+MCL  = medial collateral ligament injury (sprain any grade, partial or complete tear).
+MM   = medial meniscus TEAR (degeneration or grade 1-2 intrasubstance signal without tear = 0).
+LM   = lateral meniscus TEAR (same rule).
+MOA  = osteoarthritis of the medial tibiofemoral compartment (cartilage loss, chondral defects, osteophytes, joint space narrowing, subchondral edema or sclerosis).
+LOA  = osteoarthritis of the lateral tibiofemoral compartment (same signs, lateral femoral condyle or lateral tibial plateau).
+PFOA = patellofemoral osteoarthritis: chondromalacia or cartilage loss of the patella or trochlea, patellofemoral osteophytes.
+EFF  = joint effusion (physiological trace fluid = 0, small = 1, moderate = 2, large = 3).
+SYN  = synovitis, synovial thickening or hypertrophy, Hoffa fat pad edema/synovitis.
+BAK  = Baker's (popliteal) cyst.
+CON  = bone contusion / bone bruise / traumatic bone marrow edema.
+FX   = fracture (including avulsion and subchondral insufficiency fracture).
+
+Report:
+"""{report}"""
+
+Return ONE JSON object with an integer grade 0-3 for every key, for example:
+{"ACL":0,"MCL":0,"MM":2,"LM":0,"MOA":1,"LOA":0,"PFOA":1,"EFF":1,"SYN":0,"BAK":0,"CON":0,"FX":0}
+```
+
+Decoding is greedy (no sampling). At each grade digit the probabilities of the tokens `0`–`3` are read, and the label is the expected grade Σ k·p(k), a continuous score instead of a hard 0–3. Models without a system role (Gemma) get the system text at the start of the user turn.
+
+</details>
+
 **2. DICOM preprocessing** ([`kneemri/preprocessing.py`](src/kneemri/preprocessing.py), [`kneemri/cache.py`](src/kneemri/cache.py))
 - Each study's series are assigned to 6 slots: sagittal, coronal and axial, each fluid-sensitive or not.
 - Each series is reoriented to a canonical view using DICOM geometry, and left knees are mirrored to right.
